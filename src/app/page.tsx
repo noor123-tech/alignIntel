@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import Script from 'next/script';
+import LessonPlanExporter from '@/components/LessonPlanExporter';
 import {
   Sparkles,
   UploadCloud,
@@ -744,7 +745,16 @@ export default function AlignIntelDashboard() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || 'Server returned an error');
+        let errMsg = data.error || 'Server returned an error';
+        if (typeof errMsg === 'object') {
+          errMsg = errMsg.message || JSON.stringify(errMsg);
+        } else if (typeof errMsg === 'string') {
+          try {
+            const parsed = JSON.parse(errMsg);
+            if (parsed.error && parsed.error.message) errMsg = parsed.error.message;
+          } catch(e) {}
+        }
+        throw new Error(errMsg);
       }
 
       setDetectedGrade(data.detectedGrade || '--');
@@ -809,7 +819,16 @@ export default function AlignIntelDashboard() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || 'Server failed to rewrite lesson plan.');
+        let errMsg = data.error || 'Server failed to rewrite lesson plan.';
+        if (typeof errMsg === 'object') {
+          errMsg = errMsg.message || JSON.stringify(errMsg);
+        } else if (typeof errMsg === 'string') {
+          try {
+            const parsed = JSON.parse(errMsg);
+            if (parsed.error && parsed.error.message) errMsg = parsed.error.message;
+          } catch(e) {}
+        }
+        throw new Error(errMsg);
       }
 
       setRewrittenPlan(data.rewrittenLessonPlan);
@@ -2159,91 +2178,11 @@ export default function AlignIntelDashboard() {
 
                       {/* Side by Side Display if rewritten plan available */}
                       {rewrittenPlan ? (
-                        <div className="space-y-6">
-                          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-
-                            {/* Original Plan view */}
-                            <div className="flex flex-col gap-2">
-                              <h5 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest font-mono">Original plan</h5>
-                              <div className="bg-slate-950 p-5 rounded-2xl border border-white/5 font-sans text-slate-300 text-xs leading-relaxed max-h-[420px] overflow-y-auto whitespace-pre-wrap">
-                                {lessonPlanText || '(Image-only/Scanned lesson plan processed via Multimodal AI)'}
-                              </div>
-                            </div>
-
-                            {/* Rewritten Plan view */}
-                            <div className="flex flex-col gap-2">
-                              <div className="flex justify-between items-center flex-wrap gap-2">
-                                <h5 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest font-mono text-emerald-400 flex items-center gap-1">
-                                  <CheckCircle className="w-3 h-3" /> Fully-aligned rewritten plan
-                                </h5>
-                                <div className="flex items-center gap-2">
-                                  <button
-                                    onClick={async () => {
-                                      try {
-                                        await navigator.clipboard.writeText(rewrittenPlan);
-                                        setCopiedPlan(true);
-                                        setTimeout(() => setCopiedPlan(false), 2000);
-                                      } catch (e) {
-                                        console.error(e);
-                                      }
-                                    }}
-                                    className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded transition-all flex items-center gap-1 ${
-                                      copiedPlan
-                                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                                        : 'text-indigo-400 hover:text-indigo-200 border border-transparent'
-                                    }`}
-                                  >
-                                    {copiedPlan ? (
-                                      <>
-                                        <CheckCircle className="w-3 h-3" /> Copied!
-                                      </>
-                                    ) : (
-                                      'Copy Text'
-                                    )}
-                                  </button>
-                                  <button
-                                    onClick={handleExportRewrittenPDF}
-                                    className="text-[10px] text-emerald-400 hover:text-emerald-200 border border-emerald-500/20 px-2 py-1 rounded-lg font-bold uppercase tracking-wider flex items-center gap-1 transition-all"
-                                  >
-                                    <Download className="w-3 h-3" /> Save to PDF
-                                  </button>
-                                  <button
-                                    onClick={handleExportWord}
-                                    className="text-[10px] text-sky-400 hover:text-sky-200 border border-sky-500/20 px-2 py-1 rounded-lg font-bold uppercase tracking-wider flex items-center gap-1 transition-all"
-                                  >
-                                    <FileText className="w-3 h-3" /> Save to Word
-                                  </button>
-                                </div>
-                              </div>
-                              <div className="bg-slate-950 p-5 rounded-2xl border border-emerald-500/20 font-sans text-slate-200 text-xs leading-relaxed max-h-[420px] overflow-y-auto prose prose-invert prose-xs">
-                                <div className="whitespace-pre-wrap">{rewrittenPlan}</div>
-                              </div>
-                            </div>
-
-                          </div>
-
-                          {/* Changes Logs list */}
-                          {changesMade.length > 0 && (
-                            <div className="space-y-3">
-                              <h5 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest font-mono">Revision Action Logs</h5>
-                              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                {changesMade.map((chg, idx) => (
-                                  <div key={idx} className="p-4 bg-slate-900 border border-white/5 rounded-xl space-y-1.5">
-                                    <div className="flex justify-between items-center">
-                                      <span className="text-[10px] bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 px-2 py-0.5 rounded font-bold uppercase tracking-wider font-mono">
-                                        {chg.element}
-                                      </span>
-                                    </div>
-                                    <p className="text-xs font-semibold text-slate-200">{chg.whatWasChanged}</p>
-                                    <p className="text-[10px] text-slate-400 italic">
-                                      <strong>Pedagogy Logic:</strong> {chg.pedagogicalReason}
-                                    </p>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                        </div>
+                        <LessonPlanExporter
+                          rewrittenPlan={rewrittenPlan}
+                          changesMade={changesMade}
+                          originalPlan={lessonPlanText}
+                        />
                       ) : (
                         <div className="p-8 border border-white/5 bg-slate-900/40 rounded-2xl text-center text-xs text-slate-400 italic">
                           Click the generate button above to run the deep revision synthesizer. Gaps, missing curriculum standards, and your selected focuses will be fully integrated.
