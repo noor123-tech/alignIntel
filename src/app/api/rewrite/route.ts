@@ -85,17 +85,52 @@ Verify that your response is completely valid JSON and follows this exact struct
       contents: [prompt],
       config: {
         responseMimeType: 'application/json',
+        responseSchema: {
+          type: 'OBJECT',
+          properties: {
+            rewrittenLessonPlan: { type: 'STRING' },
+            changesMade: {
+              type: 'ARRAY',
+              items: {
+                type: 'OBJECT',
+                properties: {
+                  element: { type: 'STRING' },
+                  whatWasChanged: { type: 'STRING' },
+                  pedagogicalReason: { type: 'STRING' }
+                },
+                required: ['element', 'whatWasChanged', 'pedagogicalReason']
+              }
+            }
+          },
+          required: ['rewrittenLessonPlan', 'changesMade']
+        }
       }
     });
 
-    const resultText = response.text;
+    let resultText = response.text;
     if (!resultText) {
       throw new Error('Gemini API returned an empty response.');
     }
 
-    // Try to parse the result to guarantee validity
-    const data = JSON.parse(resultText.trim());
-    return NextResponse.json(data);
+    resultText = resultText.trim();
+    // Strip markdown JSON wrappers if present
+    if (resultText.startsWith('```json')) {
+      resultText = resultText.substring(7);
+    } else if (resultText.startsWith('```')) {
+      resultText = resultText.substring(3);
+    }
+    if (resultText.endsWith('```')) {
+      resultText = resultText.substring(0, resultText.length - 3);
+    }
+    resultText = resultText.trim();
+
+    try {
+      const data = JSON.parse(resultText);
+      return NextResponse.json(data);
+    } catch (parseError: any) {
+      console.error('Failed to parse Gemini response as JSON. Raw response:', resultText);
+      throw new Error(`Invalid JSON format in model output: ${parseError.message}`);
+    }
 
   } catch (error: any) {
     console.error('Error in /api/rewrite:', error);

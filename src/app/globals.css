@@ -1,27 +1,66 @@
-@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,100..900;1,100..900&family=Poppins:ital,wght@0,100..900;1,100..900&family=JetBrains+Mono:wght@400;500&display=swap');
 
 @import "tailwindcss";
 
 @theme {
   --font-sans: 'Poppins', sans-serif;
+  --font-inter: 'Inter', sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
+}
+
+/* Majestic UI/UX design tokens provided by the user */
+.hero-title-giant {
+  font-family: 'Inter', sans-serif;
+  font-style: italic;
+  font-weight: 800;
+  font-size: clamp(3rem, 8vw, 117.632px);
+  line-height: 112%;
+  color: #1E35CC;
+  letter-spacing: -0.04em;
+}
+
+.hero-subheading-majestic {
+  font-family: 'Inter', sans-serif;
+  font-style: normal;
+  font-weight: 800;
+  font-size: clamp(1.8rem, 5vw, 68.6355px);
+  line-height: 112%;
+  color: #000000;
+  letter-spacing: -0.03em;
+}
+
+.hero-text-important {
+  font-family: 'Poppins', sans-serif;
+  font-style: normal;
+  font-weight: 800;
+  font-size: clamp(1.2rem, 3vw, 37.458px);
+  line-height: 125%;
+  color: #FFFFFF;
+}
+
+.hero-paragraph-ultra-light {
+  font-family: 'Inter', sans-serif;
+  font-style: normal;
+  font-weight: 200;
+  font-size: clamp(1rem, 2.5vw, 32.9204px);
+  line-height: 112%;
+  color: #FFFFFF;
 }
 
 /* Base style resets and scrollbars */
 body {
   font-family: var(--font-sans);
-  background-color: #030712;
-  color: #f3f4f6;
+  background-color: #FFFFFF;
+  color: #0f172a;
   min-height: 100vh;
   overflow-x: hidden;
 }
 
-/* Glassmorphism card utility */
+/* Glassmorphic card utility: majestic dark black container */
 .glass-panel {
-  background: rgba(17, 24, 39, 0.7);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #000000;
+  border: 1px solid #051056;
+  box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.4);
 }
 
 .glass-panel-hover {
@@ -29,9 +68,9 @@ body {
 }
 
 .glass-panel-hover:hover {
-  background: rgba(17, 24, 39, 0.85);
+  background: #020202;
   border-color: rgba(99, 102, 241, 0.3);
-  box-shadow: 0 10px 30px -10px rgba(99, 102, 241, 0.2);
+  box-shadow: 0 10px 30px -10px rgba(99, 102, 241, 0.4);
   transform: translateY(-2px);
 }
 
@@ -40,23 +79,29 @@ body {
   width: 8px;
   height: 8px;
 }
+
 ::-webkit-scrollbar-track {
   background: rgba(3, 7, 18, 0.5);
 }
+
 ::-webkit-scrollbar-thumb {
   background: rgba(99, 102, 241, 0.3);
   border-radius: 9999px;
 }
+
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(99, 102, 241, 0.6);
 }
 
 /* Animations */
 @keyframes pulse-glow {
-  0%, 100% {
+
+  0%,
+  100% {
     opacity: 0.5;
     transform: scale(1);
   }
+
   50% {
     opacity: 0.8;
     transform: scale(1.05);
@@ -66,6 +111,7 @@ body {
 .glow-effect {
   position: relative;
 }
+
 .glow-effect::after {
   content: '';
   position: absolute;
@@ -76,6 +122,7 @@ body {
   opacity: 0;
   transition: opacity 0.3s ease;
 }
+
 .glow-effect:hover::after {
   opacity: 1;
 }

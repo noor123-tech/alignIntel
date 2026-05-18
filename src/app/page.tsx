@@ -32,6 +32,14 @@ import {
 } from 'lucide-react';
 import Fuse from 'fuse.js';
 
+// Extend the global Window interface for dynamic CDN-loaded libraries
+declare global {
+  interface Window {
+    pdfjsLib?: any;
+    mammoth?: any;
+  }
+}
+
 // --- THE CURRICULUM DATABASE (Colegio Bilingüe Ciudad Blanca Standards) ---
 const DEFAULT_STANDARDS = [
   // Prekinder
@@ -39,16 +47,16 @@ const DEFAULT_STANDARDS = [
   { grade: "PK", id: "L-PK.2", text: "Recognize their own name and the names of 2–3 classmates when spoken aloud in a group setting." },
   { grade: "PK", id: "S-PK.1", text: "Repeat single words and simple phrases modeled by the teacher, such as color names, numbers 1–5, and greetings." },
   { grade: "PK", id: "W-PK.1", text: "Demonstrate pre-writing readiness by drawing controlled shapes (lines, circles, crosses) and holding a writing tool with a functional grip." },
-  
+
   // Kinder
   { grade: "K", id: "L-K.1", text: "Follow two-step oral instructions given by the teacher using familiar classroom language and visual support." },
   { grade: "K", id: "S-K.1", text: "Name at least 15 familiar classroom and household objects, animals, and colors using single words or short noun phrases." },
-  
+
   // 1st Grade
   { grade: "1", id: "L-1.1", text: "Identify the main idea and at least two supporting details from a short read-aloud or listened text." },
   { grade: "1", id: "S-1.1", text: "Describe a familiar person, place, or object using a complete sentence that includes a subject, verb, and at least one adjective." },
   { grade: "1", id: "R-1.1", text: "Decode CVC and simple CCVC words and recognize a set of up to 30 high-frequency sight words." },
-  
+
   // 4th Grade
   { grade: "4", id: "L-4.1", text: "Evaluate whether the speaker's claims are supported by clear evidence, identifying at least one strong point and one weak claim." },
   { grade: "4", id: "S-4.4", text: "Distinguish between informal and formal spoken language and demonstrate the ability to adjust register appropriately." },
@@ -91,7 +99,9 @@ const PEDAGOGICAL_FOCUS_OPTIONS = [
   { id: 'formative-assessment', label: 'Formative Assessment Milestones', description: 'Add quick checking strategies like exit tickets and check-ins.' },
   { id: 'differentiation', label: 'Differentiated Learning Paths', description: 'Include adaptations for advanced learners and students needing scaffolding.' },
   { id: 'vocabulary-scaffold', label: 'Academic Vocabulary Anchors', description: 'Scaffold complex subject-specific words throughout the lesson flow.' },
-  { id: 'esl-support', label: 'Bilingual / ESL Supports', description: 'Provide visual models and speaking frames specifically for language learners.' }
+  { id: 'esl-support', label: 'Bilingual / ESL Supports', description: 'Provide visual models and speaking frames specifically for language learners.' },
+  { id: 'iep-support', label: 'IEP / IES / ILP (Special Ed)', description: 'Scaffold accommodations and targeted adjustments for special education needs.' },
+  { id: 'pbl-support', label: 'Project-Based Learning (PBL)', description: 'Integrate active, student-led inquiry and collaborative problem-solving.' }
 ];
 
 export default function AlignIntelDashboard() {
@@ -170,6 +180,7 @@ export default function AlignIntelDashboard() {
     pedagogicalReason: string;
   }>>([]);
   const [activeTab, setActiveTab] = useState<'alignment' | 'gaps' | 'improvements' | 'rewriter'>('alignment');
+  const [copiedPlan, setCopiedPlan] = useState<boolean>(false);
 
   const [localConfidenceThreshold, setLocalConfidenceThreshold] = useState<number>(35);
   const [showRawText, setShowRawText] = useState<boolean>(false);
@@ -187,7 +198,7 @@ export default function AlignIntelDashboard() {
       if (!sessionKey) {
         setEngineMode('local'); // Default to local if no key is entered
       }
-      
+
       // Load alignment reports history from SQLite
       fetchHistory();
     }
@@ -270,7 +281,7 @@ export default function AlignIntelDashboard() {
 
       setSuccessMsg('Alignment report saved successfully to SQLite database!');
       fetchHistory(); // Refresh history listing
-      
+
       // Auto clear success message after 4s
       setTimeout(() => setSuccessMsg(''), 4000);
     } catch (err: any) {
@@ -295,7 +306,7 @@ export default function AlignIntelDashboard() {
       }
 
       const report = data.report;
-      
+
       // Restore page state variables
       setDetectedGrade(report.detectedGrade);
       setLessonPlanFileName(report.lessonPlanName);
@@ -304,7 +315,7 @@ export default function AlignIntelDashboard() {
       setLessonPlanFileMimeType('');
       setIsScannedFile(false);
       setScannedNotification('');
-      
+
       if (report.standardsText) {
         setStandardsType('paste');
         setCustomStandardsText(report.standardsText);
@@ -436,11 +447,11 @@ export default function AlignIntelDashboard() {
         if (ext === 'pdf') {
           setIsScannedStandards(true);
           setStandardsFileMimeType(file.type || 'application/pdf');
-          
+
           const base64 = await fileToBase64(file);
           setStandardsFileBase64(base64);
           setCustomStandardsText('');
-          
+
           if (engineMode === 'local') {
             setScannedStandardsNotification('⚠️ Scanned PDF/Image detected for Standards! Switch to Gemini AI Mode in Settings and enter an API Key to enable visual OCR.');
           } else {
@@ -486,11 +497,11 @@ export default function AlignIntelDashboard() {
         // PNG/JPEG/WebP direct image file
         setIsScannedFile(true);
         setLessonPlanFileMimeType(file.type);
-        
+
         const base64 = await fileToBase64(file);
         setLessonPlanFileBase64(base64);
         setLessonPlanText(''); // Clear textual inputs
-        
+
         if (engineMode === 'local') {
           setScannedNotification('⚠️ Scanned photo loaded! The Local Offline Engine cannot read image files. Switch to Gemini AI Mode in Settings and enter an API Key to run OCR.');
         } else {
@@ -499,16 +510,16 @@ export default function AlignIntelDashboard() {
       } else if (ext === 'pdf') {
         // Check if PDF has selectable text
         let text = await extractTextFromPDF(file);
-        
+
         if (!text || text.trim().length < 50) {
           // Scanned PDF (0 text characters extracted)
           setIsScannedFile(true);
           setLessonPlanFileMimeType(file.type || 'application/pdf');
-          
+
           const base64 = await fileToBase64(file);
           setLessonPlanFileBase64(base64);
           setLessonPlanText('');
-          
+
           if (engineMode === 'local') {
             setScannedNotification('⚠️ Scanned PDF detected (no text elements found)! The Local Offline Engine cannot read scanned image documents. Switch to Gemini AI Mode in Settings and enter an API Key to enable visual OCR.');
           } else {
@@ -521,12 +532,12 @@ export default function AlignIntelDashboard() {
         }
       } else if (ext === 'docx') {
         let text = await extractTextFromDocx(file);
-        
+
         if (!text || text.trim().length < 50) {
           // A flat scanned DOCX is highly non-standard. Suggest conversion or copy-pasting.
           throw new Error('Word Document contains scanned image snapshots rather than actual text characters. Please export this document as a PDF file to run visual OCR, or copy-paste the text directly using the PASTE tab.');
         }
-        
+
         setLessonPlanText(text);
         setSuccessMsg(`Text extracted successfully from Word doc: ${file.name}`);
       } else {
@@ -550,7 +561,7 @@ export default function AlignIntelDashboard() {
   // --- Local / Offline Alignment Engine (Fuse.js & Regex fallback) ---
   const runLocalOfflineEngine = (lessonText: string, standardsDB: typeof DEFAULT_STANDARDS) => {
     setProgressMsg('Extracting elements locally...');
-    
+
     // 1. Grade detection
     const gradeMatch = lessonText.match(/(?:grade|level|cycle)\s*[:\-]?\s*([0-9]{1,2}(?:th|st|nd|rd)?|PK|K|PP|Prepa|Kindergarten)/i);
     const gradeRaw = gradeMatch ? gradeMatch[1].toUpperCase() : "--";
@@ -599,12 +610,12 @@ export default function AlignIntelDashboard() {
     const localAlignments = elements.map(el => {
       const results = fuse.search(el.text);
       const bestMatch = results[0];
-      
+
       let score = 0;
       let standard = null;
       if (bestMatch) {
         score = Math.round((1 - bestMatch.score!) * 100);
-        
+
         // Specific penalty/bonus for Grade Alignment
         if (normalizedGrade !== "--") {
           const standardGrade = bestMatch.item.grade.toUpperCase().replace(/(ST|ND|RD|TH)/g, "");
@@ -623,8 +634,8 @@ export default function AlignIntelDashboard() {
         matchedStandardId: standard ? standard.id : null,
         matchedStandardText: standard ? standard.text : null,
         score: score,
-        evidence: score > 35 
-          ? `Local Match Engine identified alignment based on fuzzy keyword correlation (${score}% confidence).` 
+        evidence: score > 35
+          ? `Local Match Engine identified alignment based on fuzzy keyword correlation (${score}% confidence).`
           : 'Low semantic alignment detected in local evaluation.'
       };
     });
@@ -717,7 +728,7 @@ export default function AlignIntelDashboard() {
     // AI Mode - Hit API Route
     try {
       setProgressMsg(isScannedFile ? 'Running Gemini visual OCR & semantic standards check...' : 'Aligning curriculum semantically with Gemini AI...');
-      
+
       const response = await fetch('/api/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -941,9 +952,32 @@ export default function AlignIntelDashboard() {
       .filter(a => a.score >= localConfidenceThreshold)
       .map(a => `${a.type}\t"${a.elementText}"\t${a.matchedStandardId || 'None'}: ${a.matchedStandardText || 'N/A'}\t${a.score}%`)
       .join('\n');
-    
+
     navigator.clipboard.writeText(`Type\tLesson Element\tMatched Standard\tScore\n${tableText}`);
     alert('Alignment table copied to clipboard in tab-separated format! You can paste it into Excel or Google Sheets.');
+  };
+
+  // --- Server-driven File Download Helper ---
+  const triggerServerDownload = async (content: string, filename: string, contentType: string, isBase64 = false) => {
+    if (typeof window === 'undefined') return;
+    try {
+      console.log('[triggerServerDownload] Initiating download POST request. content length:', content ? content.length : 0, 'filename:', filename, 'isBase64:', isBase64);
+      const response = await fetch('/api/download', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content, filename, contentType, isBase64 })
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to initialize download');
+      }
+
+      window.open(`/api/download?id=${data.id}`, '_blank');
+    } catch (err: any) {
+      console.error('Server-side download trigger failed:', err);
+      alert(`Download failed: ${err.message}`);
+    }
   };
 
   // --- Export Report as PDF ---
@@ -955,7 +989,7 @@ export default function AlignIntelDashboard() {
       require('jspdf-autotable');
 
       const doc = new jsPDF();
-      
+
       // Header Style
       doc.setFillColor(49, 46, 129); // Indigo 900
       doc.rect(0, 0, 210, 40, 'F');
@@ -964,7 +998,7 @@ export default function AlignIntelDashboard() {
       doc.setFontSize(22);
       doc.setTextColor(255, 255, 255);
       doc.text("AlignIntel Curriculum Alignment", 15, 20);
-      
+
       doc.setFontSize(10);
       doc.setFont("helvetica", "normal");
       doc.setTextColor(199, 210, 254);
@@ -1007,7 +1041,7 @@ export default function AlignIntelDashboard() {
 
       // Gap Analysis & Suggestions
       let currentY = (doc as any).lastAutoTable.finalY + 12;
-      
+
       doc.setFont("helvetica", "bold");
       doc.setFontSize(12);
       doc.text("Gap Analysis & Recommendation Logs", 15, currentY);
@@ -1032,10 +1066,124 @@ export default function AlignIntelDashboard() {
         currentY += 10;
       });
 
-      doc.save(`AlignIntel_Report_${new Date().getTime()}.pdf`);
+      // Use Server-driven helper to preserve filename in sandboxed iframes without opening blank tabs
+      const pdfBase64 = doc.output('datauristring').split('base64,')[1];
+      triggerServerDownload(pdfBase64, `AlignIntel_Report_${new Date().getTime()}.pdf`, 'application/pdf', true);
     } catch (err: any) {
       console.error(err);
       alert(`PDF generation failed: ${err.message}`);
+    }
+  };
+
+  // --- Export Rewritten Plan as PDF ---
+  const handleExportRewrittenPDF = () => {
+    if (!rewrittenPlan) return;
+    try {
+      const { jsPDF } = require('jspdf');
+      const doc = new jsPDF();
+
+      // Header style
+      doc.setFillColor(15, 23, 42); // Slate 900
+      doc.rect(0, 0, 210, 40, 'F');
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(20);
+      doc.setTextColor(255, 255, 255);
+      doc.text("AlignIntel AI Revised Lesson Plan", 15, 20);
+
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(148, 163, 184); // Slate 400
+      doc.text(`Designed for Colegio Bilingüe Ciudad Blanca  |  Model: Gemini Cognitive AI`, 15, 30);
+
+      // Metadata details
+      doc.setFontSize(11);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(30, 41, 59); // Slate 800
+      doc.text("Plan Specifications & Revision Logs", 15, 52);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.text(`Target Grade Level: ${detectedGrade}`, 15, 60);
+      doc.text(`Revision Mode: Fully-Aligned Scaffolding`, 15, 66);
+      doc.text(`Export Time: ${new Date().toLocaleString()}`, 15, 72);
+
+      // Line separator
+      doc.setDrawColor(226, 232, 240); // Slate 200
+      doc.line(15, 78, 195, 78);
+
+      // Content Section
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.text("Revised Lesson Plan Content", 15, 88);
+
+      let currentY = 96;
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.setTextColor(15, 23, 42);
+
+      const splitText = doc.splitTextToSize(rewrittenPlan, 180);
+      splitText.forEach((line: string) => {
+        if (currentY > 275) {
+          doc.addPage();
+          currentY = 20;
+        }
+        doc.text(line, 15, currentY);
+        currentY += 6;
+      });
+
+      // Use Server-driven helper to preserve filename in sandboxed iframes without opening blank tabs
+      const pdfBase64 = doc.output('datauristring').split('base64,')[1];
+      triggerServerDownload(pdfBase64, `AlignIntel_AI_Revised_Plan_${new Date().getTime()}.pdf`, 'application/pdf', true);
+    } catch (err: any) {
+      console.error(err);
+      alert(`PDF revised plan generation failed: ${err.message}`);
+    }
+  };
+
+  // --- Export Rewritten Plan as Word Doc (.doc / HTML-based) ---
+  const handleExportWord = () => {
+    if (!rewrittenPlan) return;
+    try {
+      const htmlContent = `
+        <html xmlns:o='urn:schemas-microsoft-com:office:office' 
+              xmlns:w='urn:schemas-microsoft-com:office:word' 
+              xmlns='http://www.w3.org/TR/REC-html40'>
+        <head>
+          <title>AlignIntel AI Revised Lesson Plan</title>
+          <style>
+            body { font-family: 'Arial', sans-serif; line-height: 1.6; color: #333333; margin: 40px; }
+            h1 { color: #1e35cc; font-size: 24px; border-bottom: 2px solid #1e35cc; padding-bottom: 8px; }
+            h2 { color: #333333; font-size: 18px; margin-top: 24px; }
+            p { font-size: 11pt; margin-bottom: 12px; }
+            .header-info { background-color: #f3f4f6; padding: 15px; border-radius: 8px; margin-bottom: 20px; font-size: 10pt; }
+            .footer { font-size: 9pt; color: #777777; margin-top: 40px; border-top: 1px solid #eeeeee; padding-top: 10px; }
+          </style>
+        </head>
+        <body>
+          <h1>AlignIntel AI Revised Lesson Plan</h1>
+          <div class="header-info">
+            <strong>Target Institution:</strong> Colegio Bilingüe Ciudad Blanca<br/>
+            <strong>Grade Level:</strong> ${detectedGrade}<br/>
+            <strong>Generated via:</strong> Gemini Cognitive AI Engine<br/>
+            <strong>Date:</strong> ${new Date().toLocaleString()}
+          </div>
+          <h2>Revised Plan Narrative & Structure</h2>
+          <div>
+            ${rewrittenPlan.replace(/\n/g, '<br/>')}
+          </div>
+          <div class="footer">
+            Generated by AlignIntel Curriculum Engine. All Rights Reserved &copy; 2027.
+          </div>
+        </body>
+        </html>
+      `;
+
+      // Use Server-driven helper to preserve filename in sandboxed iframes without opening blank tabs
+      triggerServerDownload(htmlContent, `AlignIntel_Revised_Plan_${new Date().getTime()}.doc`, 'application/msword');
+    } catch (err: any) {
+      console.error(err);
+      alert(`Word document generation failed: ${err.message}`);
     }
   };
 
@@ -1058,15 +1206,20 @@ export default function AlignIntelDashboard() {
       />
 
       {/* Main Page Layout */}
-      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col antialiased pb-12 selection:bg-indigo-500 selection:text-white">
-        
+      <div className="min-h-screen bg-white text-slate-900 flex flex-col antialiased pb-12 selection:bg-indigo-500 selection:text-white relative overflow-hidden">
+
+        {/* Global Page Background Vector Element */}
+        <div className="absolute top-0 right-0 w-[650px] h-[650px] opacity-30 pointer-events-none z-0">
+          <img src="/images/Vector_13.png" alt="Background Graphic Right" className="w-full h-full object-contain" />
+        </div>
+
         {/* Glow decorative spheres */}
         <div className="absolute top-0 right-1/4 w-[500px] h-[500px] bg-indigo-600/10 rounded-full blur-[140px] pointer-events-none -z-10 animate-pulse" style={{ animationDuration: '8s' }}></div>
         <div className="absolute top-[20%] left-1/4 w-[400px] h-[400px] bg-emerald-600/5 rounded-full blur-[120px] pointer-events-none -z-10 animate-pulse" style={{ animationDuration: '12s' }}></div>
         <div className="absolute bottom-[10%] right-[10%] w-[450px] h-[450px] bg-purple-600/10 rounded-full blur-[130px] pointer-events-none -z-10 animate-pulse" style={{ animationDuration: '10s' }}></div>
 
-        {/* --- Header Section --- */}
-        <header className="border-b border-white/5 bg-slate-950/80 backdrop-blur-md sticky top-0 z-40 transition-all duration-300">
+        {/* --- Header Section (Clean White Background) --- */}
+        <header className="border-b border-slate-200 bg-white/80 backdrop-blur-md sticky top-0 z-40 transition-all duration-300">
           <div className="max-w-[1600px] mx-auto px-6 h-20 flex items-center justify-between">
             <div className="flex items-center gap-4 group">
               <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-emerald-400 p-0.5 shadow-lg shadow-indigo-500/10 flex items-center justify-center transform group-hover:rotate-6 transition-transform duration-300">
@@ -1076,12 +1229,12 @@ export default function AlignIntelDashboard() {
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h1 className="text-xl font-bold tracking-tight text-white font-sans">AlignIntel</h1>
-                  <span className="text-[10px] bg-indigo-500/10 text-indigo-300 px-2 py-0.5 rounded-full border border-indigo-500/20 font-medium">
+                  <h1 className="text-xl font-bold tracking-tight text-slate-900 font-sans">AlignIntel</h1>
+                  <span className="text-[10px] bg-indigo-500/10 text-indigo-700 px-2 py-0.5 rounded-full border border-indigo-500/20 font-medium">
                     2027 Standards Ready
                   </span>
                 </div>
-                <p className="text-xs text-slate-400 uppercase tracking-widest font-mono">
+                <p className="text-xs text-slate-500 uppercase tracking-widest font-mono">
                   Curriculum Alignment Intelligence
                 </p>
               </div>
@@ -1091,11 +1244,10 @@ export default function AlignIntelDashboard() {
             <div className="flex items-center gap-3">
               <button
                 onClick={() => setEngineMode(prev => prev === 'ai' ? 'local' : 'ai')}
-                className={`hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-medium tracking-wide transition-all ${
-                  engineMode === 'ai'
-                    ? 'bg-indigo-500/10 text-indigo-300 border-indigo-500/20'
-                    : 'bg-amber-500/10 text-amber-300 border-amber-500/20'
-                }`}
+                className={`hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-medium tracking-wide transition-all ${engineMode === 'ai'
+                    ? 'bg-indigo-500/10 text-indigo-700 border-indigo-500/20'
+                    : 'bg-amber-500/10 text-amber-700 border-amber-500/20'
+                  }`}
               >
                 <Layers className="w-3.5 h-3.5" />
                 Mode: {engineMode === 'ai' ? 'Gemini AI Engine' : 'Local Fuzzy Engine'}
@@ -1103,15 +1255,15 @@ export default function AlignIntelDashboard() {
 
               <button
                 onClick={handleLoadSample}
-                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white rounded-xl text-sm font-medium border border-white/5 hover:border-white/10 transition-all shadow-sm flex items-center gap-2"
+                className="px-4 py-2 bg-slate-50 hover:bg-slate-100 text-slate-700 hover:text-slate-900 rounded-xl text-sm font-medium border border-slate-200 hover:border-slate-350 transition-all shadow-sm flex items-center gap-2"
               >
-                <Compass className="w-4 h-4 text-emerald-400" />
+                <Compass className="w-4 h-4 text-emerald-600" />
                 Try Sample Plan
               </button>
 
               <button
                 onClick={() => setShowSettings(true)}
-                className="p-2.5 bg-slate-900 hover:bg-slate-800 rounded-xl border border-white/5 hover:border-indigo-500/30 text-slate-300 hover:text-indigo-400 transition-all shadow-sm relative group"
+                className="p-2.5 bg-slate-50 hover:bg-slate-100 rounded-xl border border-slate-200 hover:border-indigo-500/30 text-slate-700 hover:text-indigo-600 transition-all shadow-sm relative group"
                 title="Cognitive Engine Keys"
               >
                 <Settings className="w-5 h-5" />
@@ -1123,7 +1275,7 @@ export default function AlignIntelDashboard() {
               {hasResults && (
                 <button
                   onClick={handleClearAll}
-                  className="p-2.5 bg-slate-900 hover:bg-rose-950/20 border border-white/5 hover:border-rose-500/30 rounded-xl text-slate-400 hover:text-rose-400 transition-all shadow-sm"
+                  className="p-2.5 bg-slate-50 hover:bg-rose-50 border border-slate-200 hover:border-rose-500/30 rounded-xl text-slate-600 hover:text-rose-600 transition-all shadow-sm"
                   title="Reset Workspace"
                 >
                   <Trash2 className="w-5 h-5" />
@@ -1135,7 +1287,7 @@ export default function AlignIntelDashboard() {
 
         {/* --- Main Dashboard Container --- */}
         <div className="max-w-[1600px] mx-auto px-6 w-full grid grid-cols-1 lg:grid-cols-12 gap-8 mt-8 flex-1">
-          
+
           {/* LEFT COLUMN: Controls & Input Workspace & Database History (5 Cols) */}
           <div className="lg:col-span-5 flex flex-col gap-6">
             {/* Inline Sleek API Key Entry Panel when key is missing */}
@@ -1198,36 +1350,33 @@ export default function AlignIntelDashboard() {
                     <p className="text-xs text-slate-400">Define the benchmark framework</p>
                   </div>
                 </div>
-                
+
                 {/* Standards Type Selector */}
                 <div className="flex bg-slate-950 p-0.5 rounded-lg border border-white/5">
                   <button
                     onClick={() => setStandardsType('default')}
-                    className={`px-3 py-1 text-[10px] font-bold rounded-md uppercase tracking-wider transition-all ${
-                      standardsType === 'default'
+                    className={`px-3 py-1 text-[10px] font-bold rounded-md uppercase tracking-wider transition-all ${standardsType === 'default'
                         ? 'bg-indigo-600 text-white shadow-md'
                         : 'text-slate-400 hover:text-slate-200'
-                    }`}
+                      }`}
                   >
                     Default
                   </button>
                   <button
                     onClick={() => setStandardsType('paste')}
-                    className={`px-3 py-1 text-[10px] font-bold rounded-md uppercase tracking-wider transition-all ${
-                      standardsType === 'paste'
+                    className={`px-3 py-1 text-[10px] font-bold rounded-md uppercase tracking-wider transition-all ${standardsType === 'paste'
                         ? 'bg-indigo-600 text-white shadow-md'
                         : 'text-slate-400 hover:text-slate-200'
-                    }`}
+                      }`}
                   >
                     Paste
                   </button>
                   <button
                     onClick={() => setStandardsType('file')}
-                    className={`px-3 py-1 text-[10px] font-bold rounded-md uppercase tracking-wider transition-all ${
-                      standardsType === 'file'
+                    className={`px-3 py-1 text-[10px] font-bold rounded-md uppercase tracking-wider transition-all ${standardsType === 'file'
                         ? 'bg-indigo-600 text-white shadow-md'
                         : 'text-slate-400 hover:text-slate-200'
-                    }`}
+                      }`}
                   >
                     File
                   </button>
@@ -1343,26 +1492,24 @@ export default function AlignIntelDashboard() {
                     <p className="text-xs text-slate-400">Input plan content for alignment check</p>
                   </div>
                 </div>
-                
+
                 {/* Lesson Plan Type Selector */}
                 <div className="flex bg-slate-950 p-0.5 rounded-lg border border-white/5">
                   <button
                     onClick={() => setLessonPlanType('paste')}
-                    className={`px-3.5 py-1 text-[10px] font-bold rounded-md uppercase tracking-wider transition-all ${
-                      lessonPlanType === 'paste'
+                    className={`px-3.5 py-1 text-[10px] font-bold rounded-md uppercase tracking-wider transition-all ${lessonPlanType === 'paste'
                         ? 'bg-emerald-600 text-white shadow-md'
                         : 'text-slate-400 hover:text-slate-200'
-                    }`}
+                      }`}
                   >
                     Paste
                   </button>
                   <button
                     onClick={() => setLessonPlanType('file')}
-                    className={`px-3.5 py-1 text-[10px] font-bold rounded-md uppercase tracking-wider transition-all ${
-                      lessonPlanType === 'file'
+                    className={`px-3.5 py-1 text-[10px] font-bold rounded-md uppercase tracking-wider transition-all ${lessonPlanType === 'file'
                         ? 'bg-emerald-600 text-white shadow-md'
                         : 'text-slate-400 hover:text-slate-200'
-                    }`}
+                      }`}
                   >
                     File
                   </button>
@@ -1584,56 +1731,124 @@ export default function AlignIntelDashboard() {
 
           {/* RIGHT COLUMN: Results Dashboard Area (7 Cols) */}
           <div className="lg:col-span-7 flex flex-col gap-6">
-            {!hasResults ? (
-              // Empty state dashboard - "Insanely Good and Professional" initial display
-              <div className="glass-panel rounded-3xl p-12 shadow-xl border border-white/5 flex flex-col items-center justify-center text-center gap-6 min-h-[600px] relative overflow-hidden flex-1">
-                
-                {/* Floating glassmorphic grid background element */}
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_30%,rgba(99,102,241,0.05),transparent_60%)] pointer-events-none"></div>
+            {!hasResults ? (() => {
+              const mainHeadingStyle = {
+                fontFamily: "'Inter', sans-serif",
+                fontStyle: 'italic' as const,
+                fontWeight: 800,
+                fontSize: '117.632px',
+                lineHeight: '112%',
+                color: '#1E35CC'
+              };
 
-                <div className="w-20 h-20 rounded-3xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center shadow-inner animate-bounce" style={{ animationDuration: '4s' }}>
-                  <Sparkles className="w-10 h-10" />
-                </div>
+              const subHeadingStyle = {
+                fontFamily: "'Inter', sans-serif",
+                fontStyle: 'normal' as const,
+                fontWeight: 800,
+                fontSize: '68.6355px',
+                lineHeight: '112%',
+                color: '#000000'
+              };
 
-                <div className="space-y-3 max-w-lg">
-                  <h2 className="text-3xl font-extrabold tracking-tight text-white sm:text-4xl font-sans">
-                    AlignIntel Analytics Board
-                  </h2>
-                  <p className="text-slate-400 leading-relaxed text-sm sm:text-base">
-                    Ensure educational standards alignment seamlessly. Paste or upload your curriculum standards and lesson plan documents (including images or scanned PDFs!) to map alignments, run gap analysis, and explore the AI revision generator.
-                  </p>
-                </div>
+              const importantTextStyle = {
+                fontFamily: "'Poppins', sans-serif",
+                fontStyle: 'normal' as const,
+                fontWeight: 800,
+                fontSize: '37.458px',
+                lineHeight: '125%',
+                color: '#FFFFFF'
+              };
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 w-full max-w-2xl mt-6">
-                  <div className="p-4 bg-slate-900/60 rounded-2xl border border-white/5 flex flex-col items-center gap-2">
-                    <Layers className="w-6 h-6 text-indigo-400" />
-                    <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider font-mono">1. Extraction</h4>
-                    <p className="text-[10px] text-slate-400">Isolate objectives, methods, & quizzes automatically.</p>
+              const paragraphTextStyle = {
+                fontFamily: "'Inter', sans-serif",
+                fontStyle: 'normal' as const,
+                fontWeight: 200,
+                fontSize: '32.9204px',
+                lineHeight: '112%',
+                color: '#FFFFFF'
+              };
+
+              return (
+                // Empty state dashboard - Majestic, Ultra-Premium Editorial Hero
+                <div className="flex flex-col gap-8 flex-1 animate-fadeIn">
+                  
+                  {/* Giant Typography Header Segment (Pure Solid Dark Black Container) */}
+                  <div className="relative overflow-hidden rounded-3xl bg-black border border-[#051056] p-8 md:p-12 shadow-2xl flex flex-col gap-4 min-h-[300px] justify-center">
+                    {/* Decorative Vector 13 provided by the user */}
+                    <div className="absolute top-0 left-0 w-80 h-80 opacity-20 pointer-events-none transform -translate-x-12 -translate-y-12">
+                      <img src="/images/Vector_13.png" alt="Vector Element 13" className="w-full h-full object-contain" />
+                    </div>
+                    
+                    <h1 style={mainHeadingStyle}>AlignIntel</h1>
+                    <h3 style={importantTextStyle} className="mt-2">
+                      Educational Standards Alignment & Lesson Revision Suite
+                    </h3>
+                    <p style={paragraphTextStyle} className="max-w-2xl mt-2">
+                      How would you like to analyze lesson plan alignment with provisional 2027 standards using cognitive AI, and at the same time automatically rewrite your objectives for elite pedagogical outcomes?
+                    </p>
                   </div>
-                  <div className="p-4 bg-slate-900/60 rounded-2xl border border-white/5 flex flex-col items-center gap-2">
-                    <Compass className="w-6 h-6 text-emerald-400" />
-                    <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider font-mono">2. Alignment Matrix</h4>
-                    <p className="text-[10px] text-slate-400">Match lesson objectives with provisional standards.</p>
-                  </div>
-                  <div className="p-4 bg-slate-900/60 rounded-2xl border border-white/5 flex flex-col items-center gap-2">
-                    <Sparkles className="w-6 h-6 text-purple-400" />
-                    <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider font-mono">3. AI Revision</h4>
-                    <p className="text-[10px] text-slate-400">Remap objectives or trigger full curriculum rewrites.</p>
+
+                  {/* Sub-heading & Contrast Segment (White background segment) */}
+                  <div className="relative overflow-hidden bg-white rounded-3xl p-8 md:p-10 border border-slate-200 shadow-xl flex flex-col gap-6">
+                    {/* Vector 22 graphic for elegant corporate branding */}
+                    <div className="absolute bottom-0 left-0 w-96 h-96 opacity-10 pointer-events-none transform -translate-x-12 translate-y-12">
+                      <img src="/images/Vector_22.png" alt="Vector Accent 22" className="w-full h-full object-contain" />
+                    </div>
+
+                    <div className="border-l-4 border-[#1E35CC] pl-4">
+                      <h2 style={subHeadingStyle}>CURRICULUM MAPPING</h2>
+                      <p className="text-slate-600 text-xs font-mono uppercase tracking-widest mt-1">Colegio Bilingüe Ciudad Blanca • 2027 Standards Engine</p>
+                    </div>
+
+                    <p className="text-slate-700 text-sm sm:text-base leading-relaxed max-w-3xl font-sans font-normal">
+                      Ensure educational standards alignment seamlessly. Paste or upload your curriculum standards and lesson plan documents (including images or scanned PDFs!) to map alignments, run gap analysis, and explore the AI revision generator.
+                    </p>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-2 relative z-10">
+                      <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100 flex flex-col gap-1.5 hover:shadow-md transition-shadow">
+                        <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600">
+                          <Layers className="w-5 h-5" />
+                        </div>
+                        <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider font-mono">1. Extraction</h4>
+                        <p className="text-[11px] text-slate-500 leading-relaxed">Isolate objectives, methods, & quizzes automatically.</p>
+                      </div>
+                      <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100 flex flex-col gap-1.5 hover:shadow-md transition-shadow">
+                        <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-600">
+                          <Compass className="w-5 h-5" />
+                        </div>
+                        <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider font-mono">2. Alignment Matrix</h4>
+                        <p className="text-[11px] text-slate-500 leading-relaxed">Match lesson objectives with provisional standards.</p>
+                      </div>
+                      <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100 flex flex-col gap-1.5 hover:shadow-md transition-shadow">
+                        <div className="w-8 h-8 rounded-lg bg-purple-50 flex items-center justify-center text-purple-600">
+                          <Sparkles className="w-5 h-5" />
+                        </div>
+                        <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider font-mono">3. AI Revision</h4>
+                        <p className="text-[11px] text-slate-500 leading-relaxed">Remap objectives or trigger full curriculum rewrites.</p>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-4 items-center justify-between border-t border-slate-100 pt-6 mt-2 relative z-10">
+                      <div className="text-xs text-slate-500 flex items-center gap-2">
+                        <CheckCircle className="w-4 h-4 text-emerald-500" />
+                        <span className="font-sans font-medium text-slate-600">Ready for Colegio Bilingüe Ciudad Blanca English Department</span>
+                      </div>
+                      
+                      <button
+                        onClick={handleLoadSample}
+                        className="px-6 py-3 bg-[#1E35CC] hover:bg-indigo-700 text-white rounded-xl text-xs font-extrabold uppercase tracking-widest shadow-lg shadow-indigo-600/30 hover:scale-[1.02] transition-all flex items-center gap-2 cursor-pointer"
+                      >
+                        <Compass className="w-4 h-4" />
+                        Load Grade 8 Demo Lesson
+                      </button>
+                    </div>
                   </div>
                 </div>
-
-                <button
-                  onClick={handleLoadSample}
-                  className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold uppercase tracking-widest shadow-md shadow-indigo-600/20 hover:scale-105 transition-all flex items-center gap-2 border border-indigo-500/30"
-                >
-                  <Compass className="w-4 h-4" />
-                  Load Grade 8 Demo Lesson
-                </button>
-              </div>
-            ) : (
+              );
+            })() : (
               // Results dashboard structure
               <div className="flex flex-col gap-6 flex-1">
-                
+
                 {/* Stats Dashboard Grid */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                   <div className="glass-panel p-5 rounded-2xl border border-white/5 relative group">
@@ -1667,47 +1882,43 @@ export default function AlignIntelDashboard() {
 
                 {/* Dashboard Tabs & Content Area */}
                 <div className="glass-panel rounded-3xl shadow-xl flex flex-col border border-white/5 flex-1 overflow-hidden min-h-[500px]">
-                  
+
                   {/* Tabs Header */}
                   <div className="border-b border-white/5 bg-slate-900/60 p-2.5 flex items-center justify-between flex-wrap gap-2">
                     <div className="flex gap-1.5">
                       <button
                         onClick={() => setActiveTab('alignment')}
-                        className={`px-4 py-2 text-xs font-semibold rounded-xl transition-all ${
-                          activeTab === 'alignment'
+                        className={`px-4 py-2 text-xs font-semibold rounded-xl transition-all ${activeTab === 'alignment'
                             ? 'bg-indigo-600 text-white shadow-md'
                             : 'text-slate-400 hover:text-slate-200'
-                        }`}
+                          }`}
                       >
                         Alignment Matrix
                       </button>
                       <button
                         onClick={() => setActiveTab('gaps')}
-                        className={`px-4 py-2 text-xs font-semibold rounded-xl transition-all ${
-                          activeTab === 'gaps'
+                        className={`px-4 py-2 text-xs font-semibold rounded-xl transition-all ${activeTab === 'gaps'
                             ? 'bg-indigo-600 text-white shadow-md'
                             : 'text-slate-400 hover:text-slate-200'
-                        }`}
+                          }`}
                       >
                         Gap Analysis ({gapAnalysis.length})
                       </button>
                       <button
                         onClick={() => setActiveTab('improvements')}
-                        className={`px-4 py-2 text-xs font-semibold rounded-xl transition-all ${
-                          activeTab === 'improvements'
+                        className={`px-4 py-2 text-xs font-semibold rounded-xl transition-all ${activeTab === 'improvements'
                             ? 'bg-indigo-600 text-white shadow-md'
                             : 'text-slate-400 hover:text-slate-200'
-                        }`}
+                          }`}
                       >
                         Improvement Logs
                       </button>
                       <button
                         onClick={() => setActiveTab('rewriter')}
-                        className={`px-4 py-2 text-xs font-semibold rounded-xl transition-all flex items-center gap-1.5 ${
-                          activeTab === 'rewriter'
+                        className={`px-4 py-2 text-xs font-semibold rounded-xl transition-all flex items-center gap-1.5 ${activeTab === 'rewriter'
                             ? 'bg-gradient-to-r from-emerald-600 to-indigo-600 text-white shadow-md'
                             : 'text-slate-400 hover:text-slate-200'
-                        }`}
+                          }`}
                       >
                         <Sparkles className="w-3.5 h-3.5" />
                         AI Revision
@@ -1883,7 +2094,7 @@ export default function AlignIntelDashboard() {
                   {/* TAB 4: REWRITER & REVISION ASSISTANT */}
                   {activeTab === 'rewriter' && (
                     <div className="flex-1 overflow-auto p-6 flex flex-col gap-6">
-                      
+
                       {/* Rewrite Engine Settings Header */}
                       <div className="p-5 bg-slate-900 border border-white/5 rounded-2xl space-y-4">
                         <div>
@@ -1908,11 +2119,10 @@ export default function AlignIntelDashboard() {
                                 <button
                                   key={opt.id}
                                   onClick={() => handleToggleFocus(opt.id)}
-                                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
-                                    isSel
+                                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${isSel
                                       ? 'bg-emerald-600/25 border-emerald-500/40 text-emerald-300 shadow-md shadow-emerald-500/5'
                                       : 'bg-slate-950 border-white/5 text-slate-400 hover:border-white/10 hover:text-slate-200'
-                                  }`}
+                                    }`}
                                   title={opt.description}
                                 >
                                   {opt.label}
@@ -1951,7 +2161,7 @@ export default function AlignIntelDashboard() {
                       {rewrittenPlan ? (
                         <div className="space-y-6">
                           <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-                            
+
                             {/* Original Plan view */}
                             <div className="flex flex-col gap-2">
                               <h5 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest font-mono">Original plan</h5>
@@ -1962,19 +2172,48 @@ export default function AlignIntelDashboard() {
 
                             {/* Rewritten Plan view */}
                             <div className="flex flex-col gap-2">
-                              <div className="flex justify-between items-center">
+                              <div className="flex justify-between items-center flex-wrap gap-2">
                                 <h5 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest font-mono text-emerald-400 flex items-center gap-1">
                                   <CheckCircle className="w-3 h-3" /> Fully-aligned rewritten plan
                                 </h5>
-                                <button
-                                  onClick={() => {
-                                    navigator.clipboard.writeText(rewrittenPlan);
-                                    alert('Rewritten lesson plan copied to clipboard!');
-                                  }}
-                                  className="text-[10px] text-indigo-400 hover:text-indigo-200 underline font-bold uppercase tracking-wider"
-                                >
-                                  Copy Text
-                                </button>
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    onClick={async () => {
+                                      try {
+                                        await navigator.clipboard.writeText(rewrittenPlan);
+                                        setCopiedPlan(true);
+                                        setTimeout(() => setCopiedPlan(false), 2000);
+                                      } catch (e) {
+                                        console.error(e);
+                                      }
+                                    }}
+                                    className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded transition-all flex items-center gap-1 ${
+                                      copiedPlan
+                                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                                        : 'text-indigo-400 hover:text-indigo-200 border border-transparent'
+                                    }`}
+                                  >
+                                    {copiedPlan ? (
+                                      <>
+                                        <CheckCircle className="w-3 h-3" /> Copied!
+                                      </>
+                                    ) : (
+                                      'Copy Text'
+                                    )}
+                                  </button>
+                                  <button
+                                    onClick={handleExportRewrittenPDF}
+                                    className="text-[10px] text-emerald-400 hover:text-emerald-200 border border-emerald-500/20 px-2 py-1 rounded-lg font-bold uppercase tracking-wider flex items-center gap-1 transition-all"
+                                  >
+                                    <Download className="w-3 h-3" /> Save to PDF
+                                  </button>
+                                  <button
+                                    onClick={handleExportWord}
+                                    className="text-[10px] text-sky-400 hover:text-sky-200 border border-sky-500/20 px-2 py-1 rounded-lg font-bold uppercase tracking-wider flex items-center gap-1 transition-all"
+                                  >
+                                    <FileText className="w-3 h-3" /> Save to Word
+                                  </button>
+                                </div>
                               </div>
                               <div className="bg-slate-950 p-5 rounded-2xl border border-emerald-500/20 font-sans text-slate-200 text-xs leading-relaxed max-h-[420px] overflow-y-auto prose prose-invert prose-xs">
                                 <div className="whitespace-pre-wrap">{rewrittenPlan}</div>
@@ -2072,21 +2311,19 @@ export default function AlignIntelDashboard() {
                 <div className="grid grid-cols-2 gap-2 bg-slate-950 p-1 rounded-xl border border-white/5">
                   <button
                     onClick={() => setEngineMode('ai')}
-                    className={`py-2 text-xs font-semibold rounded-lg transition-all ${
-                      engineMode === 'ai'
+                    className={`py-2 text-xs font-semibold rounded-lg transition-all ${engineMode === 'ai'
                         ? 'bg-indigo-600 text-white shadow-md'
                         : 'text-slate-400 hover:text-slate-200'
-                    }`}
+                      }`}
                   >
                     Gemini AI Model
                   </button>
                   <button
                     onClick={() => setEngineMode('local')}
-                    className={`py-2 text-xs font-semibold rounded-lg transition-all ${
-                      engineMode === 'local'
+                    className={`py-2 text-xs font-semibold rounded-lg transition-all ${engineMode === 'local'
                         ? 'bg-indigo-600 text-white shadow-md'
                         : 'text-slate-400 hover:text-slate-200'
-                    }`}
+                      }`}
                   >
                     Local Regex & Fuzzy
                   </button>
