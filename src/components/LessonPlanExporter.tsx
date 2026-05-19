@@ -105,8 +105,9 @@ function parsePlan(md: string): ParsedPlan {
   const section = (re: RegExp): string => {
     const idx = lines.findIndex(l => re.test(l));
     if (idx === -1) return '';
-    const level = (lines[idx].match(/^(#+)/) || ['', ''])[1].length;
-    const end = lines.findIndex((l, i) => i > idx && /^#{1,3} /.test(l) && (l.match(/^(#+)/) || ['', ''])[1].length <= level);
+    const m = lines[idx].match(/^(#+)/);
+    const level = m ? m[1].length : 99;
+    const end = lines.findIndex((l, i) => i > idx && /^#{1,4} /.test(l) && (l.match(/^(#+)/) || ['', ''])[1].length <= level);
     return lines.slice(idx + 1, end === -1 ? undefined : end).join('\n').trim();
   };
 
@@ -208,11 +209,11 @@ function parsePlan(md: string): ParsedPlan {
     });
   }
 
-  const assessment = section(/^#{1,3}\s*assessment/i)
+  const assessment = section(/^(?:#{1,4}\s*|\*\*\s*)(assessment|formative assessment|evaluation)/i)
     .replace(/^[\-*•]\s*/gm, '').trim().substring(0, 400);
-  const differentiation = section(/^#{1,3}\s*differentiat/i)
+  const differentiation = section(/^(?:#{1,4}\s*|\*\*\s*)(differentiat|accommodation|modification)/i)
     .replace(/^[\-*•]\s*/gm, '').trim().substring(0, 400);
-  const teacherNotes = section(/^#{1,3}\s*(teacher note|comment|note for teacher)/i)
+  const teacherNotes = section(/^(?:#{1,4}\s*|\*\*\s*)(teacher note|comment|note for teacher)/i)
     .replace(/^[\-*•]\s*/gm, '').trim().substring(0, 300);
 
   return {
@@ -240,9 +241,23 @@ export default function LessonPlanExporter({ rewrittenPlan, changesMade, origina
   const handleExportPDF = () => {
     const el = printRef.current;
     if (!el) return;
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) return;
-    printWindow.document.write(`
+
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'absolute';
+    iframe.style.width = '0px';
+    iframe.style.height = '0px';
+    iframe.style.border = 'none';
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentWindow?.document;
+    if (!doc) {
+      document.body.removeChild(iframe);
+      alert('PDF export failed to initialize. Please try again.');
+      return;
+    }
+
+    doc.open();
+    doc.write(`
       <!DOCTYPE html>
       <html>
       <head>
@@ -280,9 +295,13 @@ export default function LessonPlanExporter({ rewrittenPlan, changesMade, origina
       <body>${el.innerHTML}</body>
       </html>
     `);
-    printWindow.document.close();
-    printWindow.focus();
-    setTimeout(() => { printWindow.print(); printWindow.close(); }, 400);
+    doc.close();
+
+    setTimeout(() => {
+      iframe.contentWindow?.focus();
+      iframe.contentWindow?.print();
+      setTimeout(() => document.body.removeChild(iframe), 1000);
+    }, 400);
   };
 
   // ── Export: Word (.docx) ─────────────────────────────────────────────────
@@ -291,7 +310,8 @@ export default function LessonPlanExporter({ rewrittenPlan, changesMade, origina
       const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
               AlignmentType, HeadingLevel, BorderStyle, WidthType, ShadingType,
               LevelFormat } = await import('docx');
-      const { saveAs } = await import('file-saver');
+      const fsModule = await import('file-saver');
+      const saveAs = fsModule.saveAs || fsModule.default || (fsModule as any);
 
       const PAGE_W = 9360; // content width in DXA (US Letter, 1" margins)
       const PURPLE = '7F77DD';
@@ -404,7 +424,7 @@ export default function LessonPlanExporter({ rewrittenPlan, changesMade, origina
             width: { size: PAGE_W, type: WidthType.DXA },
             columnWidths: [PAGE_W],
             rows: [
-              cardHead('Standards Alignment', EEEDFE || LIGHT_PURPLE, '3C3489'),
+              cardHead('Standards Alignment', LIGHT_PURPLE, '3C3489'),
               new TableRow({
                 children: [
                   new TableCell({
@@ -594,7 +614,7 @@ export default function LessonPlanExporter({ rewrittenPlan, changesMade, origina
       saveAs(buffer, `AlignIntel_${plan.title.replace(/[^a-z0-9]/gi, '_').substring(0, 40)}.docx`);
     } catch (err: any) {
       console.error('Word export error:', err);
-      alert(`Word export failed: ${err.message}\n\nMake sure you have run: npm install docx file-saver`);
+      alert(`Word export failed: ${err.message}\n\nPlease try again or contact support if the issue persists.`);
     }
   };
 
@@ -797,5 +817,3 @@ function Format4View({ plan }: { plan: ParsedPlan }) {
   );
 }
 
-// Fix: constant used before declaration in cardHead inside handleExportWord
-const EEEDFE = 'EEEDFE';

@@ -742,7 +742,13 @@ export default function AlignIntelDashboard() {
         })
       });
 
-      const data = await response.json();
+      const rawText = await response.text();
+      let data;
+      try {
+        data = JSON.parse(rawText);
+      } catch (e) {
+        throw new Error(!response.ok ? (rawText.substring(0, 100) + '... (Server Error)') : 'Invalid JSON received from server.');
+      }
 
       if (!response.ok) {
         let errMsg = data.error || 'Server returned an error';
@@ -816,7 +822,13 @@ export default function AlignIntelDashboard() {
         })
       });
 
-      const data = await response.json();
+      const rawText = await response.text();
+      let data;
+      try {
+        data = JSON.parse(rawText);
+      } catch (e) {
+        throw new Error(!response.ok ? (rawText.substring(0, 100) + '... (Server Error)') : 'Invalid JSON received from server.');
+      }
 
       if (!response.ok) {
         let errMsg = data.error || 'Server failed to rewrite lesson plan.';
@@ -896,7 +908,13 @@ export default function AlignIntelDashboard() {
         })
       });
 
-      const data = await response.json();
+      const rawText = await response.text();
+      let data;
+      try {
+        data = JSON.parse(rawText);
+      } catch (e) {
+        throw new Error(!response.ok ? (rawText.substring(0, 100) + '... (Server Error)') : 'Invalid JSON received from server.');
+      }
 
       if (!response.ok) {
         throw new Error(data.error || 'OCR extraction failed.');
@@ -945,7 +963,13 @@ export default function AlignIntelDashboard() {
         })
       });
 
-      const data = await response.json();
+      const rawText = await response.text();
+      let data;
+      try {
+        data = JSON.parse(rawText);
+      } catch (e) {
+        throw new Error(!response.ok ? (rawText.substring(0, 100) + '... (Server Error)') : 'Invalid JSON received from server.');
+      }
 
       if (!response.ok) {
         throw new Error(data.error || 'Standards OCR extraction failed.');
